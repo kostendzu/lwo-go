@@ -1,6 +1,5 @@
 FROM golang:1.22 AS builder
 ENV GO111MODULE=on CGO_ENABLED=1 GOOS=linux
-RUN apt-get update && apt-get install -y gcc libc-dev
 WORKDIR /lwo-go
 COPY go.mod go.sum ./
 RUN go mod download
