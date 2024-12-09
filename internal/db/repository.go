@@ -30,7 +30,7 @@ func (repository *TaskRepository) createTaskTable() error {
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		title TEXT NOT NULL,
 		description TEXT,
-		due_date TEXT,
+		due_date TEXT NOT NULL,
 		completed INTEGER NOT NULL CHECK (completed IN (0, 1)),
 		overdue INTEGER NOT NULL CHECK (overdue IN (0, 1)),
 		created_at TEXT NOT NULL
@@ -71,7 +71,7 @@ func (repository *TaskRepository) CreateTask(input *TaskInput) (*Task, error) {
 }
 
 func (repository *TaskRepository) GetAllTasks() ([]*Task, error) {
-	rows, err := repository.db.Query("SELECT id, title, description, due_date, completed, overdue, created_at FROM tasks")
+	rows, err := repository.db.Query("SELECT id, title, COALESCE(description, ''), due_date, completed, overdue, created_at FROM tasks")
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +91,7 @@ func (repository *TaskRepository) GetAllTasks() ([]*Task, error) {
 }
 
 func (repository *TaskRepository) GetTaskById(id int) (*Task, error) {
-	row := repository.db.QueryRow("SELECT id, title, description, due_date, completed, overdue, created_at FROM tasks WHERE id = $1", id)
+	row := repository.db.QueryRow("SELECT id, title, COALESCE(description, ''), due_date, completed, overdue, created_at FROM tasks WHERE id = $1", id)
 
 	var task Task
 	err := row.Scan(&task.ID, &task.Title, &task.Description, &task.DueDate, &task.Completed, &task.Overdue, &task.CreatedAt)
@@ -120,26 +120,26 @@ func (repository *TaskRepository) UpdateTask(task *Task) error {
 	return nil
 }
 
-func (repository *TaskRepository) DeleteTask(taskID int) error {
+func (repository *TaskRepository) DeleteTask(taskID int) (int64, error) {
 	result, err := repository.db.Exec("DELETE FROM tasks WHERE id = $1", taskID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	if rowsAffected == 0 {
-		return errors.New("task not found")
+		return 0, nil
 	}
 
-	return nil
+	return rowsAffected, nil
 }
 
 func (repository *TaskRepository) CompleteTask(taskID int) error {
-	result, err := repository.db.Exec("UPDATE tasks SET completed = 1 WHERE id = $1", taskID)
+	result, err := repository.db.Exec("UPDATE tasks SET completed = 1 WHERE id = $1 AND overdue = 0", taskID)
 	if err != nil {
 		return err
 	}
@@ -150,7 +150,7 @@ func (repository *TaskRepository) CompleteTask(taskID int) error {
 	}
 
 	if rowsAffected == 0 {
-		return errors.New("task not found")
+		return errors.New("task can't be updated")
 	}
 
 	return nil

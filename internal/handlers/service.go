@@ -11,6 +11,10 @@ import (
 	"math/rand"
 )
 
+type CompleteResponse struct {
+	Status bool `json:"status"`
+}
+
 func ifEmptyUseCurrent(updatedValue *string, currentValue string) string {
 	if updatedValue == nil {
 		return currentValue
@@ -35,20 +39,26 @@ func validateTaskInput(input *db.TaskInput) error {
 
 func transformTaskInput(input *db.TaskInput) *db.TaskInput {
 	if input.DueDate != nil {
-		*input.DueDate += " 00:00:00"
+		*input.DueDate += " 23:59:59"
 	} else {
 		source := rand.NewSource(time.Now().UnixNano())
 		r := rand.New(source)
-		randomNumber := r.Intn(11)
-		dueDate := time.Now().Add(time.Duration(randomNumber) * time.Minute).Format("2000-01-01 00:00:00")
-		input.DueDate = &dueDate
+		randomNumber := r.Intn(11) + 3
+		dueDate := time.Now().Add(time.Duration(randomNumber) * time.Minute)
+		dueDateStr := dueDate.Format("2006-01-02 15:04:05")
+		input.DueDate = &dueDateStr
+	}
+
+	if input.Description == nil {
+		description := ""
+		input.Description = &description
 	}
 
 	return input
 }
 
 func checkDueDate(dueDate string, createdAt string) error {
-	dueDateTime, _ := time.Parse("2006-01-02 00:00:00", dueDate)
+	dueDateTime, _ := time.Parse("2006-01-02 15:04:05", dueDate)
 	createdAtTime, _ := time.Parse("2006-01-02 15:04:05", createdAt)
 
 	if createdAtTime.Compare(dueDateTime) >= 0 {
@@ -62,7 +72,7 @@ func checkDueDate(dueDate string, createdAt string) error {
 func (h *Handler) getTasks(w http.ResponseWriter, r *http.Request) {
 	tasks, err := h.repo.GetAllTasks()
 	if err != nil {
-		http.Error(w, "Failed to retrieve tasks", http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to retrieve tasks: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -118,7 +128,7 @@ func (h *Handler) updateTask(w http.ResponseWriter, r *http.Request, id int) {
 		return
 	}
 
-	if err := checkDueDate(*updatedTaskInput.DueDate, currentTask.CreatedAt); err != nil {
+	if err := checkDueDate(ifEmptyUseCurrent(updatedTaskInput.DueDate, currentTask.DueDate), currentTask.CreatedAt); err != nil {
 		http.Error(w, fmt.Sprintf("Invalid dueDate: %v", err), http.StatusBadRequest)
 		return
 	}
@@ -146,28 +156,41 @@ func (h *Handler) updateTask(w http.ResponseWriter, r *http.Request, id int) {
 
 // DELETE /tasks/{id} - Удалить задачу
 func (h *Handler) deleteTask(w http.ResponseWriter, r *http.Request, id int) {
-	err := h.repo.DeleteTask(id)
+	count, err := h.repo.DeleteTask(id)
 	if err != nil {
-		http.Error(w, "Failed to delete task", http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to delete task: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	if count > 0 {
+		w.WriteHeader(http.StatusOK)
+	} else {
+		w.WriteHeader(http.StatusNotFound)
+	}
 }
 
 // PATCH /tasks/{id}/complete - Завершить задачу
 func (h *Handler) completeTask(w http.ResponseWriter, r *http.Request, id int) {
-	err := h.repo.CompleteTask(id)
-	if err != nil {
-		http.Error(w, "Failed to mark task as completed", http.StatusInternalServerError)
+	errComplete := h.repo.CompleteTask(id)
+	task, err := h.repo.GetTaskById(id)
+
+	if errComplete != nil {
+		var result interface{}
+		if err != nil {
+			result = err
+		} else {
+			result = *task
+		}
+		http.Error(w, fmt.Sprintf("Failed to mark task as completed: %v\nTask: %+v", errComplete, result), http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(task)
 }
 
 func (h *Handler) UpdateOverdueTasks() (int64, error) {
-	now := time.Now().Format("2006-01-02")
+	now := time.Now().Format("2006-01-02 15:55:05")
 	updatedCount, err := h.repo.UpdateOverdueTasks(now)
 	if err != nil {
 		return 0, err

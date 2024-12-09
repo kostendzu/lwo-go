@@ -35,16 +35,19 @@ func NewApp() (*App, error) {
 }
 
 func (a *App) initConfig() error {
-	err := config.Load(".env")
-	if err != nil {
-		return err
+	nodeEnv := os.Getenv("NODE_ENV")
+	if nodeEnv != "DOCKER" {
+		err := config.Load(".env")
+		if err != nil {
+			return err
+		}
+		log.Println("Configs are inited")
 	}
-	log.Println("Configs are inited")
 	return nil
 }
 
 func (a *App) StartBackgroundTask(stopChan <-chan os.Signal) {
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(60 * time.Second)
 
 	go func() {
 		defer ticker.Stop()

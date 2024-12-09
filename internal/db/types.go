@@ -8,7 +8,7 @@ type Task struct {
 	ID          int    `json:"id"`
 	Title       string `json:"title"`
 	Description string `json:"description,omitempty"`
-	DueDate     string `json:"due_date,omitempty"`
+	DueDate     string `json:"due_date"`
 	Completed   int8   `json:"completed"`
 	Overdue     int8   `json:"overdue"`
 	CreatedAt   string `json:"created_at"`
@@ -29,4 +29,14 @@ type TaskInput struct {
 	Description *string `json:"description,omitempty"`
 	DueDate     *string `json:"due_date,omitempty"`
 	CreatedAt   string  `json:"created_at"`
+}
+
+type Repo interface {
+	GetAllTasks() ([]*Task, error)
+	CreateTask(input *TaskInput) (*Task, error)
+	GetTaskById(id int) (*Task, error)
+	UpdateTask(task *Task) error
+	DeleteTask(id int) (int64, error)
+	CompleteTask(id int) error
+	UpdateOverdueTasks(now string) (int64, error)
 }

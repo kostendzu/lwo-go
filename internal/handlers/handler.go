@@ -11,7 +11,7 @@ type ErrorResponse struct {
 }
 
 type Handler struct {
-	repo *db.TaskRepository
+	repo db.Repo
 }
 
 func NewHandler(repo *db.TaskRepository) *Handler {
